@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor SIGPAC + Conteo de Árboles por Template Matching</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+    <style>
+        :root {
+            --primary-color: #2e7d32;
+            --primary-hover: #388e3c;
+            --accent-color: #ffd54f;
+            --background-color: #121212;
+            --card-background: #1e1e1e;
+            --text-color: #e0e0e0;
+            --text-muted: #aaaaaa;
+            --border-color: #333333;
+            --table-header-bg: #252525;
+            --row-hover: #2a2a2a;
+            --icv-row-bg: #1a2733;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--background-color); color: var(--text-color); margin: 0; padding: 15px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header { text-align: center; margin-bottom: 20px; color: #81c784; }
+        header h1 { margin: 0 0 5px 0; font-size: 1.8rem; }
+        header p { margin: 0; color: var(--text-muted); font-size: 0.95rem; }
+        .card { background: var(--card-background); border-radius: 8px; padding: 18px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); border: 1px solid var(--border-color); }
+        .card h3 { color: #81c784; margin-top: 0; margin-bottom: 0; font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: var(--text-muted); }
+        .form-group input, .form-group select, select.sel { padding: 8px 10px; background-color: #2c2c2c; border: 1px solid var(--border-color); border-radius: 4px; font-size: 0.95rem; color: var(--text-color); }
+        .form-group input:focus { outline: none; border-color: var(--primary-color); }
+        button { background-color: var(--primary-color); color: white; border: none; padding: 10px 16px; font-size: 0.95rem; font-weight: bold; border-radius: 4px; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        button:hover { background-color: var(--primary-hover); }
+        button:disabled { background-color: #444; cursor: not-allowed; opacity: 0.6; }
+        .btn-full { width: 100%; }
+
+        /* Estilos del Contenedor Colapsable */
+        .collapsible-header {
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .collapsible-content {
+            display: none;
+            margin-top: 15px;
+        }
+        .collapsible-content.open {
+            display: block;
+        }
+        .toggle-icon {
+            transition: transform 0.3s ease;
+            color: #81c784;
+        }
+        .toggle-icon.open {
+            transform: rotate(180deg);
+        }
+
+        .detection-panel { background-color: #172418; border: 1px solid #2e5d32; }
+        .detection-panel h3 { margin-bottom: 15px; }
+        .controls-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 15px; align-items: center; }
+        .slider-container { display: flex; flex-direction: column; gap: 6px; }
+        .slider-header { display: flex; justify-content: space-between; font-size: 0.85rem; color: #b0bec5; }
+        .slider-header span.val { color: var(--accent-color); font-weight: bold; }
+        input[type=range] { width: 100%; accent-color: #81c784; cursor: pointer; }
+        .check-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #b0bec5; }
+        .counter-badge { background: rgba(0,0,0,0.4); border: 2px solid #81c784; border-radius: 8px; padding: 10px 15px; text-align: center; }
+        .counter-badge .title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+        .counter-badge .count { font-size: 2rem; font-weight: bold; color: var(--accent-color); line-height: 1.1; }
+        .detect-info { margin-top: 12px; font-size: 0.82rem; color: #9ccc9f; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 8px 12px; display: none; line-height: 1.5; }
+        .tools-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .btn-tool { background-color: #2c2c2c; color: #e0e0e0; border: 1px solid var(--border-color); font-size: 0.85rem; padding: 8px 12px; }
+        .btn-tool:hover { background-color: #3a3a3a; }
+        .btn-tool.active { background-color: #0277bd; border-color: #29b6f6; color: white; box-shadow: 0 0 8px rgba(41,182,246,0.4); }
+        .btn-tool.btn-danger.active { background-color: #c62828; border-color: #ef5350; box-shadow: 0 0 8px rgba(239,83,80,0.4); }
+        .table-responsive { overflow-x: auto; max-height: 400px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; }
+        th { background-color: var(--table-header-bg); position: sticky; top: 0; color: #81c784; box-shadow: inset 0 -1px 0 var(--border-color); z-index: 2; }
+        .icv-row { background-color: var(--icv-row-bg); }
+        tr:hover { background-color: var(--row-hover); }
+        #map-wrapper { position: relative; }
+        #map { width: 100%; height: 680px; border-radius: 6px; border: 1px solid var(--border-color); z-index: 1; }
+        .action-buttons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px; }
+        .btn-sigpac { background-color: #0288d1; }
+        .btn-sigpac:hover { background-color: #039be5; }
+        .btn-google { background-color: #d32f2f; }
+        .btn-google:hover { background-color: #e53935; }
+        .error { background-color: #2c1515; color: #ef5350; padding: 12px 15px; border-radius: 4px; border-left: 5px solid #ef5350; margin-bottom: 20px; display: none; border: 1px solid #421d1d; font-size: 0.9rem; }
+        .loading { text-align: center; display: none; font-style: italic; color: var(--text-muted); margin: 20px 0; padding: 15px; background: #1a1a1a; border-radius: 6px; }
+        .loading i { margin-right: 8px; color: #81c784; }
+        .cursor-add-mode, .cursor-add-mode .leaflet-interactive { cursor: crosshair !important; }
+        .mode-status-tag { position: absolute; top: 10px; right: 10px; z-index: 1000; background: rgba(0,0,0,0.85); color: #fff; padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; border: 1px solid #555; pointer-events: none; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1><i class="fa-solid fa-tree"></i> Visor SIGPAC + Conteo de Árboles (Template Matching)</h1>
+        <p>Detección de copas sobre la ortofoto PNOA mediante correlación con plantilla, dentro del recinto</p>
+    </header>
+
+    <div class="card">
+        <h3 style="margin-bottom: 15px;"><i class="fa-solid fa-location-dot"></i> Búsqueda de Recinto SIGPAC</h3>
+        <form id="sigpacForm">
+            <div class="form-grid">
+                <div class="form-group"><label>Provincia</label><input type="number" id="provincia" value="46" required></div>
+                <div class="form-group"><label>Municipio</label><input type="number" id="municipio" value="215" required></div>
+                <div class="form-group"><label>Agregado</label><input type="number" id="agregado" value="0" required></div>
+                <div class="form-group"><label>Zona</label><input type="number" id="zona" value="0" required></div>
+                <div class="form-group"><label>Polígono</label><input type="number" id="poligono" value="1" required></div>
+                <div class="form-group"><label>Parcela</label><input type="number" id="parcela" value="2" required></div>
+                <div class="form-group"><label>Recinto</label><input type="number" id="recinto" value="1" required></div>
+            </div>
+            <button type="submit" class="btn-full"><i class="fa-solid fa-magnifying-glass"></i> Buscar e Integrar Datos Territoriales</button>
+        </form>
+    </div>
+
+    <div id="errorMessage" class="error"></div>
+    <div id="loadingMessage" class="loading"><i class="fa-solid fa-circle-notch fa-spin"></i> Consultando bases de datos y transformando coordenadas...</div>
+
+    <div id="resultsContainer" style="display: none;">
+
+        <!-- Sección Datos Alfanuméricos (Colapsable) -->
+        <div class="card">
+            <div class="collapsible-header" id="toggleTableBtn">
+                <h3><i class="fa-solid fa-table"></i> Datos Alfanuméricos Combinados</h3>
+                <i class="fa-solid fa-chevron-down toggle-icon" id="toggleTableIcon"></i>
+            </div>
+            <div class="collapsible-content" id="tableContent">
+                <div class="table-responsive">
+                    <table id="datosTabla">
+                        <thead><tr><th>Propiedad</th><th>Valor</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="card detection-panel">
+                <h3><i class="fa-solid fa-sliders"></i> Análisis y Conteo de Árboles</h3>
+
+                <div class="controls-grid">
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="resSelect">Resolución ortofoto:</label></div>
+                        <select id="resSelect" class="sel">
+                            <option value="0.11" selected>0,11 m/px (máxima, como el artículo)</option>
+                            <option value="0.15">0,15 m/px</option>
+                            <option value="0.25">0,25 m/px</option>
+                            <option value="0.40">0,40 m/px (copas grandes)</option>
+                        </select>
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="featSelect">Capa de análisis:</label></div>
+                        <select id="featSelect" class="sel">
+                            <option value="combo" selected>Verdor + oscuridad (recomendado)</option>
+                            <option value="exg">Solo verdor (ExG)</option>
+                            <option value="dark">Solo oscuridad (copa sobre suelo claro)</option>
+                        </select>
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="winSlider">Ventana de copa (Width = Height):</label><span class="val" id="winVal">30 px</span></div>
+                        <input type="range" id="winSlider" min="12" max="64" value="30" step="1">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="ctxSlider">Sobreancho (Context):</label><span class="val" id="ctxVal">10 px</span></div>
+                        <input type="range" id="ctxSlider" min="2" max="21" value="10" step="1">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="sensitivitySlider">Sensibilidad:</label><span class="val" id="sensitivityVal">Alta</span></div>
+                        <input type="range" id="sensitivitySlider" min="1" max="5" value="4" step="1">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-header"><label for="radiusSlider">Radio del círculo:</label><span class="val" id="radiusVal">1.7 m</span></div>
+                        <input type="range" id="radiusSlider" min="0.3" max="8" value="1.65" step="0.05">
+                    </div>
+
+                    <div class="check-row">
+                        <input type="checkbox" id="autoCalib">
+                        <label for="autoCalib">Auto-calibrar tamaño de copa (ignora ventana y sobreancho)</label>
+                    </div>
+
+                    <div class="counter-badge">
+                        <div class="title">Total Árboles</div>
+                        <div class="count" id="treeCountDisplay">0</div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <button type="button" id="btnDetectTrees" class="btn-full"><i class="fa-solid fa-microchip"></i> Ejecutar Detección (Template Matching)</button>
+                </div>
+
+                <div id="detectInfo" class="detect-info"></div>
+
+                <div class="tools-bar">
+                    <span style="font-size: 0.85rem; color: #aaa; align-self: center; margin-right: 5px;">Edición Manual:</span>
+                    <button type="button" class="btn-tool active" id="btnToolSelect"><i class="fa-solid fa-hand"></i> Navegar</button>
+                    <button type="button" class="btn-tool" id="btnToolAdd"><i class="fa-solid fa-plus-circle"></i> Añadir Árbol</button>
+                    <button type="button" class="btn-tool btn-danger" id="btnToolRemove"><i class="fa-solid fa-minus-circle"></i> Eliminar Árbol</button>
+                    <button type="button" class="btn-tool" id="btnExportKML" style="margin-left: auto;"><i class="fa-solid fa-file-export"></i> Exportar KML</button>
+                    <button type="button" class="btn-tool" id="btnClearAll"><i class="fa-solid fa-trash-can"></i> Limpiar Marcadores</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 style="margin-bottom: 15px;"><i class="fa-solid fa-map-location-dot"></i> Geolocalización (PNOA IGN)</h3>
+                <div id="map-wrapper">
+                    <div id="map"></div>
+                    <div id="modeStatusTag" class="mode-status-tag"></div>
+                </div>
+                <div class="action-buttons-grid">
+                    <button type="button" id="btnSalidaGrafica" class="btn-sigpac"><i class="fa-solid fa-file-pdf"></i> Salida Gráfica SIGPAC</button>
+                    <button type="button" id="btnGoogleMaps" class="btn-google"><i class="fa-solid fa-arrow-up-right-from-square"></i> Ver en Google Maps</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<canvas id="analysisCanvas" style="display:none;"></canvas>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<!-- NÚCLEO DE DETECCIÓN DE ÁRBOLES -->
+<script id="core">
+const TreeCore = (function () {
+    const PAD = 64;
+
+    function gaussKernel(sigma) {
+        const r = Math.max(1, Math.ceil(sigma * 3));
+        const k = new Float32Array(2 * r + 1);
+        let s = 0;
+        for (let i = -r; i <= r; i++) { const v = Math.exp(-i * i / (2 * sigma * sigma)); k[i + r] = v; s += v; }
+        for (let i = 0; i < k.length; i++) k[i] /= s;
+        return { k, r };
+    }
+
+    function blur(src, w, h, sigma) {
+        const { k, r } = gaussKernel(sigma);
+        const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+        for (let y = 0; y < h; y++) {
+            const o = y * w;
+            for (let x = 0; x < w; x++) {
+                let s = 0;
+                for (let i = -r; i <= r; i++) { let xx = x + i; if (xx < 0) xx = 0; else if (xx >= w) xx = w - 1; s += src[o + xx] * k[i + r]; }
+                tmp[o + x] = s;
+            }
+        }
+        for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+                let s = 0;
+                for (let i = -r; i <= r; i++) { let yy = y + i; if (yy < 0) yy = 0; else if (yy >= h) yy = h - 1; s += tmp[yy * w + x] * k[i + r]; }
+                out[y * w + x] = s;
+            }
+        }
+        return out;
+    }
+
+    function maskStats(a, mask) {
+        let s = 0, s2 = 0, c = 0;
+        for (let i = 0; i < a.length; i++) if (mask[i]) { s += a[i]; s2 += a[i] * a[i]; c++; }
+        if (!c) return { m: 0, s: 1 };
+        const m = s / c;
+        return { m, s: Math.sqrt(Math.max(1e-9, s2 / c - m * m)) };
+    }
+
+    function buildFeature(rgba, W, H, mask, mode) {
+        const n = W * H;
+        const exg = new Float32Array(n), dark = new Float32Array(n);
+        for (let i = 0; i < n; i++) {
+            const R = rgba[4 * i], G = rgba[4 * i + 1], B = rgba[4 * i + 2];
+            exg[i] = (2 * G - R - B) / (R + G + B + 1);
+            dark[i] = -(0.299 * R + 0.587 * G + 0.114 * B);
+        }
+        const se = maskStats(exg, mask), sd = maskStats(dark, mask);
+        const we = mode === 'exg' ? 1 : mode === 'dark' ? 0 : 0.6;
+        const wd = mode === 'exg' ? 0 : mode === 'dark' ? 1 : 0.4;
+        const F = new Float32Array(n);
+        for (let i = 0; i < n; i++) F[i] = we * (exg[i] - se.m) / se.s + wd * (dark[i] - sd.m) / sd.s;
+        return F;
+    }
+
+    function downsample(F, W, H, d) {
+        if (d === 1) return { a: F, w: W, h: H };
+        const w = Math.floor(W / d), h = Math.floor(H / d);
+        const out = new Float32Array(w * h), inv = 1 / (d * d);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            let s = 0;
+            for (let j = 0; j < d; j++) { const o = (y * d + j) * W + x * d; for (let i = 0; i < d; i++) s += F[o + i]; }
+            out[y * w + x] = s * inv;
+        }
+        return { a: out, w, h };
+    }
+
+    function downMask(mask, W, H, d) {
+        if (d === 1) return mask;
+        const w = Math.floor(W / d), h = Math.floor(H / d);
+        const out = new Uint8Array(w * h), c = d >> 1;
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) out[y * w + x] = mask[(y * d + c) * W + x * d + c];
+        return out;
+    }
+
+    function integral(a, w, h, square) {
+        const W1 = w + 1;
+        const I = new Float64Array(W1 * (h + 1));
+        for (let y = 0; y < h; y++) {
+            let row = 0;
+            for (let x = 0; x < w; x++) { const v = a[y * w + x]; row += square ? v * v : v; I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + row; }
+        }
+        return I;
+    }
+
+    function boxSum(I, w, x0, y0, x1, y1) { const W1 = w + 1; return I[y1 * W1 + x1] - I[y0 * W1 + x1] - I[y1 * W1 + x0] + I[y0 * W1 + x0]; }
+
+    function otsu(a, mask) {
+        const vals = [];
+        for (let i = 0; i < a.length; i++) if (mask[i]) vals.push(a[i]);
+        if (vals.length < 50) return 0;
+        const sorted = Float32Array.from(vals).sort();
+        const lo = sorted[Math.floor(sorted.length * 0.01)], hi = sorted[Math.floor(sorted.length * 0.99)];
+        if (hi <= lo) return lo;
+        const bins = 256, hist = new Float64Array(bins);
+        for (const v of vals) { let b = Math.floor((v - lo) / (hi - lo) * (bins - 1)); if (b < 0) b = 0; if (b > bins - 1) b = bins - 1; hist[b]++; }
+        const total = vals.length;
+        let sumAll = 0; for (let i = 0; i < bins; i++) sumAll += i * hist[i];
+        let wB = 0, sumB = 0, best = -1, bestT = 0;
+        for (let t = 0; t < bins; t++) {
+            wB += hist[t]; if (!wB) continue;
+            const wF = total - wB; if (!wF) break;
+            sumB += t * hist[t];
+            const mB = sumB / wB, mF = (sumAll - sumB) / wF;
+            const between = wB * wF * (mB - mF) * (mB - mF);
+            if (between > best) { best = between; bestT = t; }
+        }
+        return lo + (bestT + 0.5) / (bins - 1) * (hi - lo);
+    }
+
+    function nms(idxs, score, w, h, minDist) {
+        const arr = Array.from(idxs);
+        arr.sort((a, b) => score[b] - score[a]);
+        const cell = Math.max(1, Math.ceil(minDist));
+        const gw = Math.ceil(w / cell) + 1, gh = Math.ceil(h / cell) + 1;
+        const grid = new Array(gw * gh);
+        const out = [], md2 = minDist * minDist;
+        for (const i of arr) {
+            const x = i % w, y = (i - x) / w;
+            const gx = Math.floor(x / cell), gy = Math.floor(y / cell);
+            let ok = true;
+            for (let yy = gy - 1; yy <= gy + 1 && ok; yy++) {
+                if (yy < 0 || yy >= gh) continue;
+                for (let xx = gx - 1; xx <= gx + 1; xx++) {
+                    if (xx < 0 || xx >= gw) continue;
+                    const g = grid[yy * gw + xx];
+                    if (!g) continue;
+                    for (const j of g) {
+                        const jx = j % w, jy = (j - jx) / w, dx = jx - x, dy = jy - y;
+                        if (dx * dx + dy * dy < md2) { ok = false; break; }
+                    }
+                    if (!ok) break;
+                }
+            }
+            if (ok) { out.push(i); const k = gy * gw + gx; (grid[k] || (grid[k] = [])).push(i); }
+        }
+        return out;
+    }
+
+    function syntheticTemplate(w, S) {
+        const T = new Float32Array(S * S), R = w / 2, c = (S - 1) / 2;
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+            const rho = Math.hypot(x - c, y - c);
+            T[y * S + x] = rho <= R ? 0.5 * (1 + Math.cos(Math.PI * rho / R)) : 0;
+        }
+        return T;
+    }
+
+    function normalizeT(T) {
+        let m = 0; for (let i = 0; i < T.length; i++) m += T[i]; m /= T.length;
+        let n = 0; for (let i = 0; i < T.length; i++) { T[i] -= m; n += T[i] * T[i]; }
+        n = Math.sqrt(n) || 1;
+        for (let i = 0; i < T.length; i++) T[i] /= n;
+        return T;
+    }
+
+    function rot90(T, S) {
+        const o = new Float32Array(S * S);
+        for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) o[y * S + x] = T[(S - 1 - x) * S + y];
+        return o;
+    }
+
+    function sensParams(s) {
+        const i = Math.min(5, Math.max(1, s)) - 1;
+        return {
+            nccThr: [0.60, 0.50, 0.42, 0.34, 0.26][i],
+            minContrast: [0.70, 0.50, 0.35, 0.20, 0.10][i],
+            vegDelta: [0.30, 0.15, 0.0, -0.15, -0.30][i]
+        };
+    }
+
+    function scan(Fw, w, h, mk, I, I2, T, S, wCrown, sp, vegThr) {
+        const half = (S - 1) / 2, n = S * S;
+        const ncc = new Float32Array(w * h).fill(-1);
+        const wh = Math.floor(wCrown / 2), crownCnt = (2 * wh + 1) * (2 * wh + 1);
+        const kh = Math.max(0, Math.floor(wCrown * 0.25)), coreCnt = (2 * kh + 1) * (2 * kh + 1);
+        const ringCnt = Math.max(1, n - crownCnt);
+        const cands = [];
+        for (let y = half; y < h - half; y++) {
+            for (let x = half; x < w - half; x++) {
+                const idx = y * w + x;
+                if (!mk[idx]) continue;
+                let num = 0;
+                for (let ty = 0; ty < S; ty++) {
+                    const rowF = (y - half + ty) * w + (x - half), rowT = ty * S;
+                    for (let tx = 0; tx < S; tx++) num += T[rowT + tx] * Fw[rowF + tx];
+                }
+                const sum = boxSum(I, w, x - half, y - half, x + half + 1, y + half + 1);
+                const sum2 = boxSum(I2, w, x - half, y - half, x + half + 1, y + half + 1);
+                const v = sum2 - sum * sum / n;
+                if (v <= 1e-6) continue;
+                const r = num / Math.sqrt(v);
+                ncc[idx] = r;
+                if (r < sp.nccThr) continue;
+                const crownSum = boxSum(I, w, x - wh, y - wh, x + wh + 1, y + wh + 1);
+                const coreMean = boxSum(I, w, x - kh, y - kh, x + kh + 1, y + kh + 1) / coreCnt;
+                const ringMean = (sum - crownSum) / ringCnt;
+                if (coreMean < vegThr) continue;
+                if (coreMean - ringMean < sp.minContrast) continue;
+                cands.push(idx);
+            }
+        }
+        return { ncc, cands };
+    }
+
+    function prepare(rgba, W, H, mask, p) {
+        const d = Math.max(1, Math.ceil((p.win + 2 * p.ctx) / 20));
+        let w = Math.max(5, Math.round(p.win / d)), c = Math.max(1, Math.round(p.ctx / d));
+        if ((w + 2 * c) % 2 === 0) w++;
+        const S = w + 2 * c;
+        const F = buildFeature(rgba, W, H, mask, p.mode || 'combo');
+        const ds = downsample(F, W, H, d);
+        const mk = downMask(mask, W, H, d);
+        let Fw = blur(ds.a, ds.w, ds.h, Math.max(0.7, w * 0.07));
+        const st = maskStats(Fw, mk);
+        for (let i = 0; i < Fw.length; i++) Fw[i] = (Fw[i] - st.m) / st.s;
+        return { d, w, c, S, Fw, mk, W: ds.w, H: ds.h };
+    }
+
+    function detect(rgba, W, H, mask, p) {
+        const pr = prepare(rgba, W, H, mask, p);
+        const { d, w, c, S, Fw, mk } = pr, ww = pr.W, hh = pr.H;
+        const I = integral(Fw, ww, hh, false), I2 = integral(Fw, ww, hh, true);
+        const sp = sensParams(p.sens || 3);
+        const vegThr = otsu(Fw, mk) + sp.vegDelta;
+        const minDist = Math.max(2, 0.75 * w);
+
+        const Imk = integral(mk, ww, hh, false), rD = Math.ceil(w * 0.75), dil = new Uint8Array(ww * hh);
+        for (let y = 0; y < hh; y++) for (let x = 0; x < ww; x++) {
+            const x0 = Math.max(0, x - rD), y0 = Math.max(0, y - rD), x1 = Math.min(ww, x + rD + 1), y1 = Math.min(hh, y + rD + 1);
+            if (boxSum(Imk, ww, x0, y0, x1, y1) > 0) dil[y * ww + x] = 1;
+        }
+
+        const T0 = normalizeT(syntheticTemplate(w, S));
+        const sp1 = { nccThr: 0.30, minContrast: 0.10, vegDelta: 0 };
+        const s1 = scan(Fw, ww, hh, dil, I, I2, T0, S, w, sp1, Math.max(vegThr, otsu(Fw, mk)));
+        const peaks1 = nms(s1.cands, s1.ncc, ww, hh, minDist);
+
+        let T = T0, learned = false, nSamples = 0;
+        if (peaks1.length >= 8) {
+            const take = Math.min(60, Math.ceil(peaks1.length * 0.5));
+            const half = (S - 1) / 2;
+            const acc = new Float32Array(S * S);
+            for (let k = 0; k < take; k++) {
+                const i = peaks1[k], x = i % ww, y = (i - x) / ww;
+                const win = new Float32Array(S * S);
+                let m = 0;
+                for (let ty = 0; ty < S; ty++) for (let tx = 0; tx < S; tx++) { const v = Fw[(y - half + ty) * ww + (x - half + tx)]; win[ty * S + tx] = v; m += v; }
+                m /= S * S;
+                let sq = 0; for (let j = 0; j < win.length; j++) { win[j] -= m; sq += win[j] * win[j]; }
+                sq = Math.sqrt(sq) || 1;
+                for (let j = 0; j < win.length; j++) acc[j] += win[j] / sq;
+            }
+            const r1 = rot90(acc, S), r2 = rot90(r1, S), r3 = rot90(r2, S);
+            const sym = new Float32Array(S * S);
+            for (let j = 0; j < sym.length; j++) sym[j] = (acc[j] + r1[j] + r2[j] + r3[j]) / 4;
+            normalizeT(sym);
+            T = new Float32Array(S * S);
+            for (let j = 0; j < T.length; j++) T[j] = 0.65 * sym[j] + 0.35 * T0[j];
+            normalizeT(T);
+            learned = true; nSamples = take;
+        }
+
+        const s2 = scan(Fw, ww, hh, dil, I, I2, T, S, w, sp, vegThr);
+        const sel = nms(s2.cands, s2.ncc, ww, hh, minDist).filter(i => mk[i]);
+        const peaks = sel.map(i => {
+            const x = i % ww, y = (i - x) / ww;
+            return { x: (x + 0.5) * d, y: (y + 0.5) * d, score: s2.ncc[i] };
+        });
+        let meanScore = 0; for (const q of peaks) meanScore += q.score;
+        meanScore = peaks.length ? meanScore / peaks.length : 0;
+        return { peaks, d, win: p.win, ctx: p.ctx, learned, nSamples, meanScore };
+    }
+
+    function autoCalibrate(rgba, W, H, mask, gsd, mode) {
+        const F = buildFeature(rgba, W, H, mask, mode || 'combo');
+        const d0 = Math.max(1, Math.round(0.30 / gsd));
+        const ds = downsample(F, W, H, d0), mk = downMask(mask, W, H, d0);
+        const w = ds.w, h = ds.h;
+        let best = null;
+        for (let dm = 1.2; dm <= 12.5; dm *= 1.18) {
+            const rPx = dm / 2 / (gsd * d0), sigma = rPx / Math.SQRT2;
+            if (sigma < 1.0) continue;
+            const G = blur(ds.a, w, h, sigma), s2 = sigma * sigma;
+            const resp = new Float32Array(w * h), cand = [];
+            for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+                const i = y * w + x;
+                if (!mk[i]) continue;
+                const r = -s2 * (G[i - 1] + G[i + 1] + G[i - w] + G[i + w] - 4 * G[i]);
+                resp[i] = r;
+                if (r > 0.05) cand.push(i);
+            }
+            if (cand.length < 3) continue;
+            const pk = nms(cand, resp, w, h, Math.max(2, rPx * 0.9));
+            const K = Math.min(40, pk.length);
+            let sc = 0; for (let k = 0; k < K; k++) sc += resp[pk[k]];
+            sc /= K;
+            if (!best || sc > best.score) best = { score: sc, diam: dm };
+        }
+        const diamM = best ? best.diam : 3.3;
+        let win = Math.round(diamM / gsd);
+        win = Math.max(12, Math.min(PAD, win));
+        const ctx = Math.max(2, Math.min(21, Math.round(win / 3)));
+        return { win, ctx, diamM };
+    }
+
+    return { PAD, detect, autoCalibrate };
+})();
+</script>
+
+<script>
+    // ---------------- Estado Global y Eventos UI ----------------
+    let map = null;
+    let wmsPnoaLayer = null;
+    let capaPoligono = null;
+    let capaChincheta = null;
+    let treeMarkersGroup = null;
+
+    let centroideActual = { lat: 0, lng: 0 };
+    let utmActual = { x: 0, y: 0 };
+    let parametrosActuales = { pr: 0, mu: 0, ag: 0, zo: 0, po: 0, pa: 0, re: 0 };
+    let currentPolygonLatLngs = [];
+
+    let treeList = [];
+    let currentMode = 'select';
+    let treeIdCounter = 0;
+    let treeRadiusM = 1.65;
+
+    // Colapsar / Expandir Tabla
+    document.getElementById('toggleTableBtn').addEventListener('click', function() {
+        const content = document.getElementById('tableContent');
+        const icon = document.getElementById('toggleTableIcon');
+        content.classList.toggle('open');
+        icon.classList.toggle('open');
+    });
+
+    // Transformación WGS84 a UTM Huso 30N
+    function convertWGS84ToUTM30N(lat, lng) {
+        const a = 6378137.0;
+        const f = 1 / 298.257222101;
+        const b = a * (1 - f);
+        const e2 = (Math.pow(a, 2) - Math.pow(b, 2)) / Math.pow(a, 2);
+        const eCuadrada = (Math.pow(a, 2) - Math.pow(b, 2)) / Math.pow(b, 2);
+        const latRad = lat * Math.PI / 180;
+        const lngRad = lng * Math.PI / 180;
+        const lambda0 = -3.0 * Math.PI / 180;
+        const deltaLng = lngRad - lambda0;
+        const k0 = 0.9996, falseEasting = 500000.0, falseNorthing = 0.0;
+        const N = a / Math.sqrt(1 - e2 * Math.sin(latRad) * Math.sin(latRad));
+        const T = Math.pow(Math.tan(latRad), 2);
+        const C = eCuadrada * Math.pow(Math.cos(latRad), 2);
+        const A = deltaLng * Math.cos(latRad);
+        const M = a * ((1 - e2 / 4 - 3 * Math.pow(e2, 2) / 64 - 5 * Math.pow(e2, 3) / 256) * latRad
+            - (3 * e2 / 8 + 3 * Math.pow(e2, 2) / 32 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(2 * latRad)
+            + (15 * Math.pow(e2, 2) / 256 + 45 * Math.pow(e2, 3) / 1024) * Math.sin(4 * latRad)
+            - (35 * Math.pow(e2, 3) / 3072) * Math.sin(6 * latRad));
+        const x = falseEasting + k0 * N * (A + (1 - T + C) * Math.pow(A, 3) / 6 + (5 - 18 * T + Math.pow(T, 2) + 72 * C - 58 * eCuadrada) * Math.pow(A, 5) / 120);
+        const y = falseNorthing + k0 * (M + N * Math.tan(latRad) * (Math.pow(A, 2) / 2 + (5 - T + 9 * C + 4 * Math.pow(C, 2)) * Math.pow(A, 4) / 24 + (61 - 58 * T + Math.pow(T, 2) + 600 * C - 330 * eCuadrada) * Math.pow(A, 6) / 720));
+        return { x: parseFloat(x.toFixed(2)), y: parseFloat(y.toFixed(2)) };
+    }
+
+    function inicializarMapa() {
+        if (map !== null) return;
+        map = L.map('map', { maxZoom: 21, preferCanvas: true }).setView([40.416775, -3.703790], 6);
+        wmsPnoaLayer = L.tileLayer.wms('https://www.ign.es/wms-inspire/pnoa-ma', {
+            layers: 'OI.OrthoimageCoverage',
+            format: 'image/png',
+            transparent: false,
+            version: '1.3.0',
+            maxNativeZoom: 19,
+            maxZoom: 21,
+            attribution: '© Instituto Geográfico Nacional (PNOA)'
+        }).addTo(map);
+        treeMarkersGroup = L.layerGroup().addTo(map);
+
+        map.on('click', function (e) {
+            if (currentMode === 'add') {
+                if (pointInPolygon([e.latlng.lat, e.latlng.lng], currentPolygonLatLngs)) {
+                    addTree(e.latlng.lat, e.latlng.lng, true);
+                } else {
+                    alert("El punto seleccionado está fuera del perímetro del recinto SIGPAC.");
+                }
+            }
+        });
+    }
+
+    function pointInPolygon(point, vs) {
+        const x = point[0], y = point[1];
+        let inside = false;
+        for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+            const xi = vs[i][0], yi = vs[i][1], xj = vs[j][0], yj = vs[j][1];
+            const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+
+    document.getElementById('sigpacForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('resultsContainer').style.display = 'none';
+        document.getElementById('loadingMessage').style.display = 'block';
+
+        parametrosActuales.pr = document.getElementById('provincia').value;
+        parametrosActuales.mu = document.getElementById('municipio').value;
+        parametrosActuales.ag = document.getElementById('agregado').value;
+        parametrosActuales.zo = document.getElementById('zona').value;
+        parametrosActuales.po = document.getElementById('poligono').value;
+        parametrosActuales.pa = document.getElementById('parcela').value;
+        parametrosActuales.re = document.getElementById('recinto').value;
+
+        const urlSIGPAC = `https://sigpac-hubcloud.es/servicioconsultassigpac/query/recinfo/${parametrosActuales.pr}/${parametrosActuales.mu}/${parametrosActuales.ag}/${parametrosActuales.zo}/${parametrosActuales.po}/${parametrosActuales.pa}/${parametrosActuales.re}.json`;
+
+        fetch(urlSIGPAC)
+            .then(response => {
+                if (!response.ok) throw new Error(`Error en el servidor SIGPAC (${response.status})`);
+                return response.json();
+            })
+            .then(dataSIGPAC => {
+                const item = Array.isArray(dataSIGPAC) ? dataSIGPAC[0] : dataSIGPAC;
+                if (!item) throw new Error("No se encontraron registros para la referencia SIGPAC indicada.");
+                const wktString = item.wkt || item.WKT;
+                if (!wktString) throw new Error("El recinto devuelto no contiene geometría WKT.");
+
+                calcularCentroideYWKT(wktString);
+                utmActual = convertWGS84ToUTM30N(centroideActual.lat, centroideActual.lng);
+
+                const urlICV = `https://descargas.icv.gva.es/00/geoprocesos/XYaMunicipioCV?x=${utmActual.x}&y=${utmActual.y}&epsg=25830`;
+                return fetch(urlICV)
+                    .then(resICV => resICV.ok ? resICV.json() : null)
+                    .catch(() => null)
+                    .then(dataICV => {
+                        document.getElementById('loadingMessage').style.display = 'none';
+                        renderizarTodo(item, dataICV, wktString);
+                    });
+            })
+            .catch(error => {
+                document.getElementById('loadingMessage').style.display = 'none';
+                const errDiv = document.getElementById('errorMessage');
+                errDiv.style.display = 'block';
+                errDiv.innerHTML = `<strong>Error de procesamiento:</strong><br>${error.message}`;
+            });
+    });
+
+    function calcularCentroideYWKT(wkt) {
+        const regex = /[-+]?[0-9]*\.?[0-9]+/g;
+        const matches = wkt.match(regex);
+        if (!matches || matches.length < 4) return;
+        let sumaLat = 0, sumaLng = 0, totalPuntos = 0;
+        currentPolygonLatLngs = [];
+        for (let i = 0; i < matches.length; i += 2) {
+            if (i === 0 && (matches[i] === '4258' || matches[i] === '4326') && matches.length % 2 !== 0) { i--; continue; }
+            const lng = parseFloat(matches[i]);
+            const lat = parseFloat(matches[i + 1]);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                sumaLat += lat; sumaLng += lng; totalPuntos++;
+                currentPolygonLatLngs.push([lat, lng]);
+            }
+        }
+        centroideActual.lat = sumaLat / totalPuntos;
+        centroideActual.lng = sumaLng / totalPuntos;
+    }
+
+    function renderizarTodo(itemSIGPAC, dataICV, wktString) {
+        document.getElementById('resultsContainer').style.display = 'block';
+        inicializarMapa();
+
+        const tbody = document.getElementById('datosTabla').querySelector('tbody');
+        tbody.innerHTML = '';
+        inyectarFilaTabla(tbody, "Centroide Latitud (WGS84)", centroideActual.lat.toFixed(6));
+        inyectarFilaTabla(tbody, "Centroide Longitud (WGS84)", centroideActual.lng.toFixed(6));
+        inyectarFilaTabla(tbody, "Coordenada UTM X (Huso 30N)", `${utmActual.x} m`);
+        inyectarFilaTabla(tbody, "Coordenada UTM Y (Huso 30N)", `${utmActual.y} m`);
+
+        if (dataICV) {
+            if (dataICV.municipio && typeof dataICV.municipio === 'object') {
+                for (const [subKey, subVal] of Object.entries(dataICV.municipio)) {
+                    inyectarFilaTabla(tbody, `ICV - MUNICIPIO: ${subKey.toUpperCase()}`, subVal, "icv-row");
+                }
+            }
+            if (dataICV.distancia_linea_limite !== undefined) {
+                inyectarFilaTabla(tbody, "ICV - DISTANCIA LÍMITE", `${dataICV.distancia_linea_limite} m`, "icv-row");
+            }
+        }
+        for (const [key, val] of Object.entries(itemSIGPAC)) {
+            if (key.toLowerCase() === 'wkt') continue;
+            inyectarFilaTabla(tbody, key, val !== null ? val : 'N/C');
+        }
+
+        dibujarGeometriaMapa();
+        configurarBotonesAccion();
+        clearTrees();
+        document.getElementById('detectInfo').style.display = 'none';
+    }
+
+    function inyectarFilaTabla(tbody, propiedad, valor, claseEstilo = "") {
+        const row = document.createElement('tr');
+        if (claseEstilo) row.classList.add(claseEstilo);
+        row.innerHTML = `<td><strong>${propiedad}</strong></td><td>${valor}</td>`;
+        tbody.appendChild(row);
+    }
+
+    function dibujarGeometriaMapa() {
+        if (capaPoligono !== null) map.removeLayer(capaPoligono);
+        if (capaChincheta !== null) map.removeLayer(capaChincheta);
+
+        capaPoligono = L.polygon(currentPolygonLatLngs, {
+            color: '#00e676', weight: 3, fillColor: '#00e676', fillOpacity: 0.08, interactive: false
+        }).addTo(map);
+
+        capaChincheta = L.marker([centroideActual.lat, centroideActual.lng]).addTo(map)
+            .bindPopup(`<b>Recinto SIGPAC</b><br>UTM X: ${utmActual.x}<br>UTM Y: ${utmActual.y}`);
+
+        map.fitBounds(capaPoligono.getBounds(), { padding: [40, 40] });
+        setTimeout(() => { map.invalidateSize(); }, 250);
+    }
+
+    function configurarBotonesAccion() {
+        const p = parametrosActuales;
+        document.getElementById('btnSalidaGrafica').onclick = function () {
+            window.open(`https://sigpac-hubcloud.es/salidasgraficassigpac/?recinto/${p.pr}/${p.mu}/${p.ag}/${p.zo}/${p.po}/${p.pa}/${p.re}`, '_blank');
+        };
+        document.getElementById('btnGoogleMaps').onclick = function () {
+            window.open(`https://www.google.com/maps/search/?api=1&query=${centroideActual.lat},${centroideActual.lng}`, '_blank');
+        };
+    }
+
+    // Slider Controls & Handlers
+    const winSlider = document.getElementById('winSlider');
+    const ctxSlider = document.getElementById('ctxSlider');
+    const radiusSlider = document.getElementById('radiusSlider');
+    const sensitivitySlider = document.getElementById('sensitivitySlider');
+    const sensitivityNames = ["Muy Baja", "Baja", "Medio", "Alta", "Muy Alta"];
+
+    winSlider.addEventListener('input', e => { document.getElementById('winVal').textContent = `${e.target.value} px`; });
+    ctxSlider.addEventListener('input', e => { document.getElementById('ctxVal').textContent = `${e.target.value} px`; });
+    sensitivitySlider.addEventListener('input', e => { document.getElementById('sensitivityVal').textContent = sensitivityNames[e.target.value - 1]; });
+    radiusSlider.addEventListener('input', e => {
+        treeRadiusM = parseFloat(e.target.value);
+        document.getElementById('radiusVal').textContent = `${treeRadiusM.toFixed(1)} m`;
+        treeList.forEach(t => t.marker.setRadius(treeRadiusM));
+    });
+
+    const btnToolSelect = document.getElementById('btnToolSelect');
+    const btnToolAdd = document.getElementById('btnToolAdd');
+    const btnToolRemove = document.getElementById('btnToolRemove');
+    const btnExportKML = document.getElementById('btnExportKML');
+    const btnClearAll = document.getElementById('btnClearAll');
+    const modeStatusTag = document.getElementById('modeStatusTag');
+    const mapWrapper = document.getElementById('map-wrapper');
+
+    function setToolMode(mode) {
+        currentMode = mode;
+        [btnToolSelect, btnToolAdd, btnToolRemove].forEach(b => b.classList.remove('active'));
+        mapWrapper.classList.remove('cursor-add-mode');
+        modeStatusTag.style.display = 'none';
+        if (mode === 'select') {
+            btnToolSelect.classList.add('active');
+        } else if (mode === 'add') {
+            btnToolAdd.classList.add('active');
+            mapWrapper.classList.add('cursor-add-mode');
+            modeStatusTag.textContent = 'Modo: Añadir Árbol (clic dentro del recinto)';
+            modeStatusTag.style.display = 'block';
+        } else if (mode === 'remove') {
+            btnToolRemove.classList.add('active');
+            modeStatusTag.textContent = 'Modo: Eliminar Árbol (clic sobre el círculo)';
+            modeStatusTag.style.display = 'block';
+        }
+    }
+    btnToolSelect.addEventListener('click', () => setToolMode('select'));
+    btnToolAdd.addEventListener('click', () => setToolMode('add'));
+    btnToolRemove.addEventListener('click', () => setToolMode('remove'));
+    btnExportKML.addEventListener('click', exportarKML);
+    btnClearAll.addEventListener('click', () => {
+        if (confirm("¿Deseas borrar todos los marcadores de árboles?")) clearTrees();
+    });
+
+    // Funcionalidad Exportar KML
+    function exportarKML() {
+        if (treeList.length === 0) {
+            alert("No hay ningún punto de árbol cargado para exportar.");
+            return;
+        }
+
+        const p = parametrosActuales;
+        const nombreArchivo = `arboles_recinto_${p.pr}_${p.mu}_${p.ag}_${p.zo}_${p.po}_${p.pa}_${p.re}.kml`;
+
+        let kmlHeader = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Puntos de Árboles Recinto ${p.pr}-${p.mu}-${p.ag}-${p.zo}-${p.po}-${p.pa}-${p.re}</name>
+    <description>Árboles detectados automáticamente y creados a mano</description>
+    <Style id="autoTree">
+      <IconStyle>
+        <scale>0.8</scale>
+        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/ylw-circle.png</href></Icon>
+      </IconStyle>
+    </Style>
+    <Style id="manualTree">
+      <IconStyle>
+        <scale>0.8</scale>
+        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon>
+      </IconStyle>
+    </Style>
+`;
+
+        let kmlPlacemarks = '';
+        treeList.forEach((t, idx) => {
+            const origen = t.isManual ? 'Manual' : 'Automático';
+            const styleId = t.isManual ? 'manualTree' : 'autoTree';
+            kmlPlacemarks += `    <Placemark>
+      <name>Árbol #${idx + 1} (${origen})</name>
+      <description>Latitud: ${t.lat.toFixed(7)}, Longitud: ${t.lng.toFixed(7)} | Origen: ${origen}</description>
+      <styleUrl>#${styleId}</styleUrl>
+      <Point>
+        <coordinates>${t.lng},${t.lat},0</coordinates>
+      </Point>
+    </Placemark>\n`;
+        });
+
+        let kmlFooter = `  </Document>
+</kml>`;
+
+        const fullKML = kmlHeader + kmlPlacemarks + kmlFooter;
+        const blob = new Blob([fullKML], { type: 'application/vnd.google-earth.kml+xml;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = nombreArchivo;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function addTree(lat, lng, isManual = false) {
+        const id = ++treeIdCounter;
+        const col = isManual ? '#00e676' : '#ffeb3b';
+        const marker = L.circle([lat, lng], { radius: treeRadiusM, color: col, weight: 2, fillColor: col, fillOpacity: 0.18 });
+        marker.on('click', (e) => {
+            if (currentMode === 'remove') { L.DomEvent.stopPropagation(e); removeTree(id); }
+        });
+        treeMarkersGroup.addLayer(marker);
+        treeList.push({ id, lat, lng, marker, isManual });
+        updateTreeCounter();
+    }
+
+    function removeTree(id) {
+        const index = treeList.findIndex(t => t.id === id);
+        if (index !== -1) {
+            treeMarkersGroup.removeLayer(treeList[index].marker);
+            treeList.splice(index, 1);
+            updateTreeCounter();
+        }
+    }
+
+    function clearTrees() {
+        if (treeMarkersGroup) treeMarkersGroup.clearLayers();
+        treeList = [];
+        updateTreeCounter();
+    }
+
+    function updateTreeCounter() {
+        document.getElementById('treeCountDisplay').textContent = treeList.length;
+    }
+
+    function loadOrtho(gsd) {
+        const lats = currentPolygonLatLngs.map(p => p[0]), lngs = currentPolygonLatLngs.map(p => p[1]);
+        const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+        const latC = (minLat + maxLat) / 2;
+        const mLat = 110540, mLng = 111320 * Math.cos(latC * Math.PI / 180);
+        const extW = (maxLng - minLng) * mLng, extH = (maxLat - minLat) * mLat;
+        const PAD = TreeCore.PAD, MAXPX = 2400;
+
+        let g = gsd;
+        while (Math.max(extW, extH) / g + 2 * PAD > MAXPX) g *= 1.1;
+        const padM = PAD * g;
+        const bMinLat = minLat - padM / mLat, bMaxLat = maxLat + padM / mLat;
+        const bMinLng = minLng - padM / mLng, bMaxLng = maxLng + padM / mLng;
+        const Wpx = Math.round((bMaxLng - bMinLng) * mLng / g), Hpx = Math.round((bMaxLat - bMinLat) * mLat / g);
+
+        const url = `https://www.ign.es/wms-inspire/pnoa-ma?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=OI.OrthoimageCoverage&STYLES=&CRS=EPSG:4326&BBOX=${bMinLat},${bMinLng},${bMaxLat},${bMaxLng}&WIDTH=${Wpx}&HEIGHT=${Hpx}&FORMAT=image/png`;
+
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                try {
+                    const canvas = document.getElementById('analysisCanvas');
+                    canvas.width = Wpx; canvas.height = Hpx;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.drawImage(img, 0, 0, Wpx, Hpx);
+                    const rgba = ctx.getImageData(0, 0, Wpx, Hpx).data;
+
+                    const mc = document.createElement('canvas');
+                    mc.width = Wpx; mc.height = Hpx;
+                    const mctx = mc.getContext('2d', { willReadFrequently: true });
+                    mctx.fillStyle = '#fff';
+                    mctx.beginPath();
+                    currentPolygonLatLngs.forEach((ll, i) => {
+                        const x = (ll[1] - bMinLng) / (bMaxLng - bMinLng) * Wpx;
+                        const y = (bMaxLat - ll[0]) / (bMaxLat - bMinLat) * Hpx;
+                        if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y);
+                    });
+                    mctx.closePath();
+                    mctx.fill();
+                    const md = mctx.getImageData(0, 0, Wpx, Hpx).data;
+                    const mask = new Uint8Array(Wpx * Hpx);
+                    let inside = 0;
+                    for (let i = 0; i < mask.length; i++) { if (md[4 * i] > 127) { mask[i] = 1; inside++; } }
+                    if (inside < 100) return reject(new Error("El recinto es demasiado pequeño para analizarlo."));
+
+                    resolve({
+                        rgba, W: Wpx, H: Hpx, mask,
+                        gsd: ((bMaxLat - bMinLat) * mLat / Hpx + (bMaxLng - bMinLng) * mLng / Wpx) / 2,
+                        bbox: { bMinLat, bMaxLat, bMinLng, bMaxLng }, areaM2: inside * g * g
+                    });
+                } catch (err) {
+                    reject(new Error("No se pudieron leer los píxeles de la ortofoto (restricción CORS del servidor WMS): " + err.message));
+                }
+            };
+            img.onerror = () => reject(new Error("El servicio WMS del IGN no devolvió la ortofoto. Prueba una resolución menor (0,25 m/px) o inténtalo de nuevo."));
+            img.src = url;
+        });
+    }
+
+    const tick = () => new Promise(r => setTimeout(r, 30));
+
+    document.getElementById('btnDetectTrees').addEventListener('click', ejecutarDeteccionArboles);
+
+    async function ejecutarDeteccionArboles() {
+        if (!capaPoligono) { alert("No hay ningún recinto cargado."); return; }
+        const btn = document.getElementById('btnDetectTrees');
+        const info = document.getElementById('detectInfo');
+        const setBtn = (t) => { btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t}`; };
+
+        btn.disabled = true;
+        info.style.display = 'none';
+        clearTrees();
+
+        try {
+            setBtn('Descargando ortofoto PNOA...');
+            await tick();
+            const ortho = await loadOrtho(parseFloat(document.getElementById('resSelect').value));
+            const mode = document.getElementById('featSelect').value;
+
+            let win = parseInt(winSlider.value, 10), ctx = parseInt(ctxSlider.value, 10);
+            let autoTxt = '';
+            if (document.getElementById('autoCalib').checked) {
+                setBtn('Calibrando tamaño de copa...');
+                await tick();
+                const est = TreeCore.autoCalibrate(ortho.rgba, ortho.W, ortho.H, ortho.mask, ortho.gsd, mode);
+                win = est.win; ctx = est.ctx;
+                winSlider.value = win; ctxSlider.value = ctx;
+                document.getElementById('winVal').textContent = `${win} px`;
+                document.getElementById('ctxVal').textContent = `${ctx} px`;
+                autoTxt = ` · copa estimada ≈ ${est.diamM.toFixed(1)} m`;
+            }
+
+            setBtn('Template matching sobre la ortofoto...');
+            await tick();
+            const res = TreeCore.detect(ortho.rgba, ortho.W, ortho.H, ortho.mask, {
+                win, ctx, mode, sens: parseInt(sensitivitySlider.value, 10)
+            });
+
+            treeRadiusM = Math.min(8, Math.max(0.3, win * ortho.gsd / 2));
+            radiusSlider.value = treeRadiusM;
+            document.getElementById('radiusVal').textContent = `${treeRadiusM.toFixed(1)} m`;
+
+            const b = ortho.bbox;
+            res.peaks.forEach(pk => {
+                const lat = b.bMaxLat - (pk.y / ortho.H) * (b.bMaxLat - b.bMinLat);
+                const lng = b.bMinLng + (pk.x / ortho.W) * (b.bMaxLng - b.bMinLng);
+                addTree(lat, lng, false);
+            });
+
+            const ha = ortho.areaM2 / 10000;
+            info.style.display = 'block';
+            info.innerHTML =
+                `<strong>${res.peaks.length}</strong> árboles en <strong>${ha.toFixed(2)} ha</strong> ` +
+                `(${(res.peaks.length / ha).toFixed(0)} árb/ha)<br>` +
+                `Ortofoto ${ortho.gsd.toFixed(2)} m/px · plantilla ${win}×${win} px + sobreancho ${ctx} px${autoTxt} · ` +
+                `${res.learned ? 'plantilla aprendida de ' + res.nSamples + ' muestras' : 'plantilla sintética (pocas muestras)'} · ` +
+                `correlación media ${res.meanScore.toFixed(2)}<br>` +
+                `<em>Si faltan árboles, sube la sensibilidad; si hay falsos positivos, bájala. Ajusta ventana/sobreancho y prueba la capa «Solo oscuridad» o «Solo verdor» según el cultivo. Retoca a mano con Añadir/Eliminar.</em>`;
+        } catch (err) {
+            console.error(err);
+            const errDiv = document.getElementById('errorMessage');
+            errDiv.style.display = 'block';
+            errDiv.innerHTML = `<strong>Error en la detección:</strong><br>${err.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-microchip"></i> Ejecutar Detección (Template Matching)`;
+        }
+    }
+</script>
+</body>
+</html>
